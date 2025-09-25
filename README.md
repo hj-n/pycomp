@@ -16,20 +16,13 @@ import pycomp
 # Usage examples will be added as the package develops
 ```
 
-## Development
 
-Install in development mode:
 
-```bash
-pip install -e ".[dev]"
-```
+## Test
 
-Run tests:
+To check whether the functions work properly for labeled datasets, run:
 
 ```bash
-pytest
+pytest test/test_labeled_datasets.py -v -s
 ```
 
-## License
-
-MIT
