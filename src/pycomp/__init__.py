@@ -1,7 +1,10 @@
 """PyComp - A Python comparison utility package."""
 
-__version__ = "0.1.0"
-__author__ = "Your Name"
-__email__ = "your.email@example.com"
+from .mnc import mnc
+from .pds import pds
 
-__all__ = []
+__version__ = "0.0.1"
+__author__ = "Hyeon Jeon"
+__email__ = "hj@hcil.snu.ac.kr"
+
+__all__ = ["mnc", "pds"]
