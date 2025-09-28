@@ -1,47 +1,48 @@
-"""
-Mutual Neighborhood Consistency (MNC)
-"""
-
-from .helpers.knnsnn import KnnSnn as ks
+import cupy as cp
+import cupyx.scipy.sparse as cpx_sparse
+from helpers.neighborhood_calculations import NeighborhoodComputations
 import numpy as np
 
-def mnc(data, k):
-	"""
-	Mutual Neighbor Consistency: complexity metric targetting local structure
-	
-	INPUT:
-	- data: numpy array of shape (n_samples, n_features) representing the high-dimensional data
-	- k: int, number of nearest neighbors to consider for computing mutual neighbor consistency
+def mnc(data: cp.ndarray | np.ndarray, k: int) -> float:
+    """
+    Mutual Neighborhood Consistency (MNC) fully GPU-optimized, sparse.
+    
+    Parameters
+    ----------
+    data : np.ndarray or cp.ndarray, shape (n_samples, n_features)
+        Input dataset.
+    k : int
+        Number of nearest neighbors.
+        
+    Returns
+    -------
+    float
+        Mutual Neighbor Consistency value.
+    """
+    
+    # @Hyeon this is a potential bottleneck since moving data between GPU and host is unnecessary,
+    # I would prefer to keep everything on gpu (also MNC and PDS calculations), but I did not want to mess with your tests
+    if isinstance(data, np.ndarray):
+        data = cp.asarray(data)
 
-	OUTPUT:
-	- float: mutual neighbor consistency value
+    n = data.shape[0]
+    ksnn = NeighborhoodComputations(k)
 
-	"""
+    knn_indices = cp.asarray(ksnn.knn(data))
+    snn_results = cp.asarray(ksnn.snn(knn_indices))
 
-	kSnn = ks(k)
+    rows = cp.repeat(cp.arange(n), k)
+    cols = knn_indices.ravel()
+    vals = cp.tile((k - cp.arange(k)) / k, n)
 
-	knn_indices = kSnn.knn(data)
-	snn_results = kSnn.snn(knn_indices)
+    knn_sparse = cpx_sparse.csr_matrix((vals, (rows, cols)), shape=(n, n))
+    snn_sparse = cpx_sparse.csr_matrix(snn_results)
 
-	## convert knn indices to knn distance matrix
-	knn_distances = np.zeros((data.shape[0], data.shape[0]))
+    knn_norms = cp.sqrt(knn_sparse.multiply(knn_sparse).sum(axis=1)).ravel()
+    snn_norms = cp.sqrt(snn_sparse.multiply(snn_sparse).sum(axis=1)).ravel()
 
-	for i in range(data.shape[0]):
-		for j in range(k):
-			knn_distances[i, knn_indices[i, j]] = (k - j) / k
-	
-	neighbor_consistency_sum = 0
-	for i in range(data.shape[0]):
-		knn_sim = knn_distances[i, :]
-		snn_sim = snn_results[i, :]
+    dot_products = knn_sparse.multiply(snn_sparse).sum(axis=1).ravel()
 
-		## compute neighbor consistency as cosine similarity
-		cos_sim = np.dot(knn_sim, snn_sim) / (np.linalg.norm(knn_sim) * np.linalg.norm(snn_sim))
-		neighbor_consistency_sum += cos_sim
-	
-	neighbor_consistency = neighbor_consistency_sum / data.shape[0]
+    cos_sims = dot_products / (knn_norms * snn_norms)
 
-	return neighbor_consistency
-	
-
-	
+    return float(cp.mean(cos_sims))
